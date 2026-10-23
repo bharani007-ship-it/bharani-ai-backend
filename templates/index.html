@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bharani AI</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="theme-color" content="#1e293b">
+</head>
+<body>
+
+<div class="mobile-app-layout">
+    <!-- TOP STATUS BAR -->
+    <header class="app-topbar">
+        <div class="brand">
+            <span class="brand-icon">🤖</span>
+            <div class="brand-title-wrap">
+                <h2>Bharani AI</h2>
+                <span class="engine-badge">Gemini Free</span>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <button class="icon-btn" id="langBtn" onclick="toggleLang()" title="Toggle Language">🌐 EN</button>
+            <button class="icon-btn" id="audioBtn" onclick="toggleAudio()" title="Toggle Audio Read-Aloud">🔊</button>
+            <button class="icon-btn" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+        </div>
+    </header>
+
+    <!-- OFFLINE / COLD-START BANNER -->
+    <div id="statusBanner" class="status-banner" style="display: none;"></div>
+
+    <!-- MAIN VIEWS CONTAINER -->
+    <main class="views-container">
+        <!-- 1. CHAT VIEW -->
+        <section id="chatView" class="mobile-view active">
+            <div class="doc-pill-bar">
+                <label for="docPicker" class="picker-label">
+                    📎 <span id="docPickerLabel">Attach Document</span>
+                    <input type="file" id="docPicker" accept=".pdf,.txt,.md,.json,.csv" onchange="handleDocUpload(this)">
+                </label>
+                <button id="clearDocBtn" class="pill-btn danger" onclick="clearLoadedDoc()" style="display:none;">✕</button>
+                <button class="pill-btn secondary" onclick="clearLocalChat()">🗑️ Clear</button>
+            </div>
+
+            <div class="chat-scroll" id="chatBox">
+                <!-- Messages rendered here -->
+            </div>
+
+            <div class="chat-input-row">
+                <input type="text" id="userInput" placeholder="Ask Bharani AI or say 'Ask me 10 MCQs'..." autocomplete="off">
+                <button id="voiceBtn" class="circle-btn mic-btn" onclick="startVoice()">🎤</button>
+                <button class="circle-btn send-btn" onclick="sendMessage()">➤</button>
+            </div>
+        </section>
+
+        <!-- 2. QUIZ & STUDY VIEW -->
+        <section id="studyView" class="mobile-view">
+            <div class="view-title">
+                <h3>📚 Document Study & Exam</h3>
+            </div>
+            <div class="action-grid">
+                <button class="touch-btn primary" onclick="launchQuiz()">🎯 Generate 10 MCQs</button>
+                <button class="touch-btn secondary" onclick="launchNotes()">📝 Generate Flashcards</button>
+            </div>
+            <div id="quizContainer" class="quiz-content-area">
+                <p class="empty-hint">Attach a document in Chat, then tap "Generate 10 MCQs" to test your knowledge.</p>
+            </div>
+        </section>
+
+        <!-- 3. MEMORY HUB -->
+        <section id="memoryView" class="mobile-view">
+            <div class="view-title">
+                <h3>🧠 Phone Memory Hub</h3>
+                <button class="action-btn-small" onclick="promptAddMemory()">➕ Add</button>
+            </div>
+            <input type="text" id="memSearch" class="search-bar" placeholder="Search saved memories..." oninput="renderMemories()">
+            <div id="memoryList" class="cards-list"></div>
+        </section>
+
+        <!-- 4. PLANNER & TASKS -->
+        <section id="plannerView" class="mobile-view">
+            <div class="view-title">
+                <h3>📋 Tasks & Planner</h3>
+                <button class="action-btn-small" onclick="promptAddTask()">➕ Task</button>
+            </div>
+            <div id="taskList" class="tasks-list"></div>
+        </section>
+
+        <!-- 5. BACKUP & RESTORE -->
+        <section id="backupView" class="mobile-view">
+            <div class="view-title">
+                <h3>💾 Backup & Phone Storage</h3>
+            </div>
+            <div class="backup-box">
+                <p class="backup-desc">All your chats and memories are stored safely <strong>on your phone</strong>. You can export or import your data anytime.</p>
+                
+                <button class="touch-btn primary" onclick="exportDataBackup()">💾 Export Backup (.json)</button>
+                
+                <label for="importFilePicker" class="touch-btn secondary file-label">
+                    📂 Import Existing Backup (.json)
+                    <input type="file" id="importFilePicker" accept=".json" onchange="importDataBackup(this)" style="display:none;">
+                </label>
+                
+                <div class="stats-card">
+                    <div>Saved Chats: <strong id="statChats">0</strong></div>
+                    <div>Saved Memories: <strong id="statMems">0</strong></div>
+                    <div>Saved Tasks: <strong id="statTasks">0</strong></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="bottom-nav">
+        <button class="nav-tab active" onclick="switchTab('chatView', this)">
+            <span class="tab-icon">💬</span>
+            <span class="tab-text">Chat</span>
+        </button>
+        <button class="nav-tab" onclick="switchTab('studyView', this)">
+            <span class="tab-icon">📚</span>
+            <span class="tab-text">Quiz</span>
+        </button>
+        <button class="nav-tab" onclick="switchTab('memoryView', this)">
+            <span class="tab-icon">🧠</span>
+            <span class="tab-text">Memory</span>
+        </button>
+        <button class="nav-tab" onclick="switchTab('plannerView', this)">
+            <span class="tab-icon">📋</span>
+            <span class="tab-text">Tasks</span>
+        </button>
+        <button class="nav-tab" onclick="switchTab('backupView', this)">
+            <span class="tab-icon">💾</span>
+            <span class="tab-text">Backup</span>
+        </button>
+    </nav>
+</div>
+
+<script>
+// ==========================================================
+// CLIENT-SIDE LOCAL STORAGE (100% PERSISTENT ON PHONE)
+// ==========================================================
+const STORAGE_KEYS = {
+    CHAT: "bharani_ai_chat_history",
+    MEMORY: "bharani_ai_memories",
+    TASKS: "bharani_ai_tasks",
+    THEME: "bharani_ai_theme",
+    LANG: "bharani_ai_lang"
+};
+
+let currentLang = localStorage.getItem(STORAGE_KEYS.LANG) || "en";
+let isAudioOn = true;
+let activeDocText = "";
+let activeDocName = "";
+
+function getStorage(key, defaultVal = []) {
+    try {
+        const val = localStorage.getItem(key);
+        return val ? JSON.parse(val) : defaultVal;
+    } catch (e) {
+        return defaultVal;
+    }
+}
+
+function setStorage(key, val) {
+    try {
+        localStorage.setItem(key, JSON.stringify(val));
+    } catch (e) {
+        console.error("Storage error:", e);
+    }
+}
+
+// ==========================================================
+// TABS & NAVIGATION
+// ==========================================================
+function switchTab(viewId, btn) {
+    document.querySelectorAll(".mobile-view").forEach(v => v.classList.remove("active"));
+    document.querySelectorAll(".nav-tab").forEach(b => b.classList.remove("active"));
+    document.getElementById(viewId).classList.add("active");
+    if (btn) btn.classList.add("active");
+
+    if (viewId === "memoryView") renderMemories();
+    if (viewId === "plannerView") renderTasks();
+    if (viewId === "backupView") updateBackupStats();
+}
+
+function toggleTheme() {
+    const cur = document.documentElement.getAttribute("data-theme");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem(STORAGE_KEYS.THEME, next);
+}
+
+function toggleLang() {
+    currentLang = currentLang === "en" ? "ta" : "en";
+    localStorage.setItem(STORAGE_KEYS.LANG, currentLang);
+    document.getElementById("langBtn").innerText = currentLang === "en" ? "🌐 EN" : "🌐 தமிழ்";
+}
+
+function toggleAudio() {
+    isAudioOn = !isAudioOn;
+    document.getElementById("audioBtn").innerText = isAudioOn ? "🔊" : "🔇";
+    if (!isAudioOn && "speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function speak(text) {
+    if (!isAudioOn || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[*#_`~]/g, "").trim();
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.lang = currentLang === "ta" ? "ta-IN" : "en-IN";
+    window.speechSynthesis.speak(utt);
+}
+
+// ==========================================================
+// VOICE INPUT
+// ==========================================================
+function startVoice() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert("Speech recognition not supported in this browser.");
+        return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = currentLang === "ta" ? "ta-IN" : "en-IN";
+    const mic = document.getElementById("voiceBtn");
+    rec.onstart = () => mic.classList.add("recording");
+    rec.onresult = (e) => {
+        document.getElementById("userInput").value = e.results[0][0].transcript;
+    };
+    rec.onend = () => mic.classList.remove("recording");
+    rec.start();
+}
+
+// ==========================================================
+// CHAT & MESSAGING WITH LOCAL STORAGE
+// ==========================================================
+const chatBox = document.getElementById("chatBox");
+
+function renderChat() {
+    chatBox.innerHTML = "";
+    const msgs = getStorage(STORAGE_KEYS.CHAT, []);
+    if (msgs.length === 0) {
+        addMessageBubble("Hello! I am Bharani AI, your personal AI assistant. All your chats and memories stay safely on your phone!", "ai", false);
+    } else {
+        msgs.forEach(m => addMessageBubble(m.content, m.role === "assistant" ? "ai" : "user", false));
+    }
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function addMessageBubble(content, role, save = true) {
+    const bubble = document.createElement("div");
+    bubble.className = `msg-bubble ${role}`;
+    bubble.innerText = content;
+    chatBox.appendChild(bubble);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    if (save) {
+        const msgs = getStorage(STORAGE_KEYS.CHAT, []);
+        msgs.push({ role: role === "ai" ? "assistant" : "user", content });
+        setStorage(STORAGE_KEYS.CHAT, msgs);
+    }
+}
+
+let activeLoading = null;
+function showLoading() {
+    activeLoading = document.createElement("div");
+    activeLoading.className = "msg-bubble ai loading";
+    activeLoading.innerHTML = "Thinking... ⏳";
+    chatBox.appendChild(activeLoading);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+function hideLoading() {
+    if (activeLoading) activeLoading.remove();
+    activeLoading = null;
+}
+
+async function sendMessage() {
+    const input = document.getElementById("userInput");
+    const q = input.value.trim();
+    if (!q) return;
+
+    addMessageBubble(q, "user", true);
+    input.value = "";
+    showLoading();
+
+    // Check name memory locally
+    const nameMatch = q.match(/my name is\s+([A-Za-z ]+)/i);
+    if (nameMatch) {
+        const n = nameMatch[1].trim();
+        saveMemoryItem("name", n, "personal");
+        hideLoading();
+        const ans = `Nice to meet you, ${n}! 😊 Saved in your phone's memory.`;
+        addMessageBubble(ans, "ai", true);
+        speak(ans);
+        return;
+    }
+
+    if (q.toLowerCase().includes("what is my name") || q.toLowerCase().includes("who am i")) {
+        const mems = getStorage(STORAGE_KEYS.MEMORY, []);
+        const found = mems.find(m => m.key.toLowerCase() === "name");
+        hideLoading();
+        const ans = found ? `Your name is ${found.value} 😊 (From your phone's memory).` : "You haven't told me your name yet! Say: 'My name is [your name]'.";
+        addMessageBubble(ans, "ai", true);
+        speak(ans);
+        return;
+    }
+
+    // Call Cloud Backend
+    const history = getStorage(STORAGE_KEYS.CHAT, []);
+    const memories = getStorage(STORAGE_KEYS.MEMORY, []);
+
+    try {
+        const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: q,
+                history: history.slice(-6),
+                memories: memories,
+                doc_text: activeDocText
+            })
+        });
+        const data = await res.json();
+        hideLoading();
+        addMessageBubble(data.answer, "ai", true);
+        speak(data.answer);
+    } catch (e) {
+        hideLoading();
+        addMessageBubble("⚠️ Could not connect to the cloud server. Please check your internet connection.", "ai", false);
+    }
+}
+
+function clearLocalChat() {
+    if (!confirm("Clear your chat history on this phone? (Your memories remain safe).")) return;
+    setStorage(STORAGE_KEYS.CHAT, []);
+    renderChat();
+}
+
+document.getElementById("userInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage();
+});
+
+// ==========================================================
+// DOCUMENT UPLOADS
+// ==========================================================
+async function handleDocUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    document.getElementById("docPickerLabel").innerText = "Extracting... ⏳";
+    try {
+        const res = await fetch("/api/upload_doc", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.success) {
+            activeDocText = data.text;
+            activeDocName = data.filename;
+            document.getElementById("docPickerLabel").innerText = data.filename;
+            document.getElementById("clearDocBtn").style.display = "inline-flex";
+            addMessageBubble(`📄 Document Loaded: ${data.filename}\nYou can now ask questions about it or launch a quiz!`, "ai", true);
+        } else {
+            alert(data.message);
+            document.getElementById("docPickerLabel").innerText = "Attach Document";
+        }
+    } catch (e) {
+        alert("Upload error.");
+        document.getElementById("docPickerLabel").innerText = "Attach Document";
+    }
+}
+
+function clearLoadedDoc() {
+    activeDocText = "";
+    activeDocName = "";
+    document.getElementById("docPicker").value = "";
+    document.getElementById("docPickerLabel").innerText = "Attach Document";
+    document.getElementById("clearDocBtn").style.display = "none";
+    addMessageBubble("🗑️ Document removed from current context.", "ai", true);
+}
+
+// ==========================================================
+// STUDY & MCQ EXAM
+// ==========================================================
+let currentQuiz = [];
+let quizIndex = 0;
+let quizScore = 0;
+
+async function launchQuiz() {
+    if (!activeDocText) {
+        alert("Please attach a document first in the Chat tab!");
+        switchTab("chatView");
+        return;
+    }
+    const container = document.getElementById("quizContainer");
+    container.innerHTML = "<div class='loading-box'>Gemini is generating 10 questions from your document... ⏳</div>";
+
+    try {
+        const res = await fetch("/api/quiz", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ doc_text: activeDocText, num_questions: 10 })
+        });
+        const data = await res.json();
+        if (data.success && data.questions && data.questions.length > 0) {
+            currentQuiz = data.questions;
+            quizIndex = 0;
+            quizScore = 0;
+            renderQuizCard();
+        } else {
+            container.innerHTML = `<p class='error-text'>${data.message || 'Could not generate quiz.'}</p>`;
+        }
+    } catch (e) {
+        container.innerHTML = "<p class='error-text'>Error generating quiz.</p>";
+    }
+}
+
+function renderQuizCard() {
+    const container = document.getElementById("quizContainer");
+    if (quizIndex >= currentQuiz.length) {
+        const pct = ((quizScore / currentQuiz.length) * 100).toFixed(1);
+        container.innerHTML = `
+            <div class="result-card">
+                <span class="trophy">🏆</span>
+                <h4>Quiz Completed!</h4>
+                <p>Score: <strong>${quizScore} / ${currentQuiz.length}</strong> (${pct}%)</p>
+                <button class="touch-btn primary" onclick="launchQuiz()">🔄 Retake</button>
+            </div>
+        `;
+        return;
+    }
+
+    const q = currentQuiz[quizIndex];
+    container.innerHTML = `
+        <div class="quiz-card">
+            <div class="quiz-header">
+                <span>Question ${quizIndex + 1} of ${currentQuiz.length}</span>
+                <span>Score: ${quizScore}</span>
+            </div>
+            <p class="quiz-question">${q.question}</p>
+            <div class="opt-col">
+                ${["A","B","C","D"].map(letter => `
+                    <button class="quiz-opt-btn" onclick="submitAnswer('${letter}')">
+                        <strong>${letter}</strong> ${q[letter]}
+                    </button>
+                `).join("")}
+            </div>
+            <div id="quizFeedback"></div>
+        </div>
+    `;
+}
+
+function submitAnswer(chosen) {
+    const q = currentQuiz[quizIndex];
+    const isCorrect = (chosen === q.answer);
+    if (isCorrect) quizScore++;
+
+    document.querySelectorAll(".quiz-opt-btn").forEach(b => b.disabled = true);
+    const fb = document.getElementById("quizFeedback");
+    fb.innerHTML = `
+        <div class="feedback-banner ${isCorrect ? 'correct' : 'wrong'}">
+            <p><strong>${isCorrect ? '✅ Correct!' : '❌ Wrong!'}</strong> Correct Answer: Option ${q.answer}</p>
+            <p class="explanation">💡 ${q.explanation}</p>
+            <button class="touch-btn secondary" onclick="nextQuizQuestion()">Next Question ➔</button>
+        </div>
+    `;
+}
+
+function nextQuizQuestion() {
+    quizIndex++;
+    renderQuizCard();
+}
+
+async function launchNotes() {
+    if (!activeDocText) {
+        alert("Please attach a document first in Chat tab!");
+        return;
+    }
+    const container = document.getElementById("quizContainer");
+    container.innerHTML = "<div class='loading-box'>Generating revision flashcards... ⏳</div>";
+
+    try {
+        const res = await fetch("/api/study_notes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ doc_text: activeDocText })
+        });
+        const data = await res.json();
+        if (data.success) {
+            container.innerHTML = `<div class="notes-display">${data.notes.replace(/\n/g, '<br>')}</div>`;
+        } else {
+            container.innerHTML = `<p class='error-text'>${data.message}</p>`;
+        }
+    } catch (e) {
+        container.innerHTML = "<p class='error-text'>Error generating notes.</p>";
+    }
+}
+
+// ==========================================================
+// MEMORY HUB (LOCAL)
+// ==========================================================
+function renderMemories() {
+    const list = document.getElementById("memoryList");
+    const q = (document.getElementById("memSearch").value || "").toLowerCase();
+    const mems = getStorage(STORAGE_KEYS.MEMORY, []);
+    list.innerHTML = "";
+
+    const filtered = mems.filter(m => m.key.toLowerCase().includes(q) || m.value.toLowerCase().includes(q));
+    if (filtered.length === 0) {
+        list.innerHTML = "<p class='empty-hint'>No memories stored yet. Tap 'Add' to save your details.</p>";
+        return;
+    }
+
+    filtered.forEach((m, idx) => {
+        const card = document.createElement("div");
+        card.className = "mem-card";
+        card.innerHTML = `
+            <div class="mem-header">
+                <span class="cat-tag">${m.category || 'personal'}</span>
+                <button class="del-btn" onclick="deleteMemory(${idx})">🗑️</button>
+            </div>
+            <strong>${m.key}</strong>
+            <p>${m.value}</p>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function promptAddMemory() {
+    const key = prompt("Enter Memory Key (e.g. 'favorite_food', 'hobby'):");
+    if (!key) return;
+    const value = prompt(`Enter value for '${key}':`);
+    if (!value) return;
+    saveMemoryItem(key, value, "personal");
+    renderMemories();
+}
+
+function saveMemoryItem(key, value, category = "personal") {
+    const mems = getStorage(STORAGE_KEYS.MEMORY, []);
+    const existing = mems.find(m => m.key.toLowerCase() === key.toLowerCase());
+    if (existing) {
+        existing.value = value;
+    } else {
+        mems.push({ key, value, category });
+    }
+    setStorage(STORAGE_KEYS.MEMORY, mems);
+}
+
+function deleteMemory(idx) {
+    if (!confirm("Delete this memory?")) return;
+    const mems = getStorage(STORAGE_KEYS.MEMORY, []);
+    mems.splice(idx, 1);
+    setStorage(STORAGE_KEYS.MEMORY, mems);
+    renderMemories();
+}
+
+// ==========================================================
+// TASKS & PLANNER (LOCAL)
+// ==========================================================
+function renderTasks() {
+    const list = document.getElementById("taskList");
+    const tasks = getStorage(STORAGE_KEYS.TASKS, []);
+    list.innerHTML = "";
+
+    if (tasks.length === 0) {
+        list.innerHTML = "<p class='empty-hint'>No tasks. Tap 'Task' above to add your to-dos.</p>";
+        return;
+    }
+
+    tasks.forEach((t, idx) => {
+        const row = document.createElement("div");
+        row.className = `task-item ${t.done ? 'done' : ''}`;
+        row.innerHTML = `
+            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTask(${idx}, this.checked)">
+            <span class="task-title">${t.title}</span>
+            <button class="del-btn" onclick="deleteTask(${idx})">🗑️</button>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function promptAddTask() {
+    const title = prompt("Enter task title:");
+    if (!title) return;
+    const tasks = getStorage(STORAGE_KEYS.TASKS, []);
+    tasks.push({ title, done: false, date: new Date().toLocaleDateString() });
+    setStorage(STORAGE_KEYS.TASKS, tasks);
+    renderTasks();
+}
+
+function toggleTask(idx, done) {
+    const tasks = getStorage(STORAGE_KEYS.TASKS, []);
+    tasks[idx].done = done;
+    setStorage(STORAGE_KEYS.TASKS, tasks);
+    renderTasks();
+}
+
+function deleteTask(idx) {
+    const tasks = getStorage(STORAGE_KEYS.TASKS, []);
+    tasks.splice(idx, 1);
+    setStorage(STORAGE_KEYS.TASKS, tasks);
+    renderTasks();
+}
+
+// ==========================================================
+// BACKUP & RESTORE (PHONE DOWNLOAD & UPLOAD)
+// ==========================================================
+function updateBackupStats() {
+    document.getElementById("statChats").innerText = getStorage(STORAGE_KEYS.CHAT, []).length;
+    document.getElementById("statMems").innerText = getStorage(STORAGE_KEYS.MEMORY, []).length;
+    document.getElementById("statTasks").innerText = getStorage(STORAGE_KEYS.TASKS, []).length;
+}
+
+function exportDataBackup() {
+    const exportData = {
+        app: "Bharani AI",
+        export_date: new Date().toISOString(),
+        chat_messages: getStorage(STORAGE_KEYS.CHAT, []),
+        memories: getStorage(STORAGE_KEYS.MEMORY, []),
+        tasks: getStorage(STORAGE_KEYS.TASKS, [])
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bharani_ai_phone_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importDataBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.memories) setStorage(STORAGE_KEYS.MEMORY, data.memories);
+            if (data.chat_messages) setStorage(STORAGE_KEYS.CHAT, data.chat_messages);
+            if (data.tasks) setStorage(STORAGE_KEYS.TASKS, data.tasks);
+
+            alert("Backup imported successfully! All your chats and memories are restored.");
+            updateBackupStats();
+            renderChat();
+        } catch (err) {
+            alert("Invalid backup file.");
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Initial Boot
+const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME) || "dark";
+document.documentElement.setAttribute("data-theme", savedTheme);
+renderChat();
+</script>
+</body>
+</html>
