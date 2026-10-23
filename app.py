@@ -99,6 +99,21 @@ def home():
     """Serves the mobile-optimized PWA / Android dashboard."""
     return render_template("index.html")
 
+@app.route("/api/models")
+def list_available_models():
+    key = os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY).strip()
+    if not key:
+        return jsonify({"error": "No key"})
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = [m.get("name") for m in data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+            return jsonify({"success": True, "models": models})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route("/api/health")
 def health():
     key_configured = bool(os.environ.get("GEMINI_API_KEY", GEMINI_API_KEY).strip())
