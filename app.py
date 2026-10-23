@@ -26,14 +26,11 @@ def call_gemini_api(contents, system_instruction=None, response_schema=None) -> 
     if not key:
         raise ValueError("GEMINI_API_KEY is not configured in the server environment variables. Please get a free key from https://aistudio.google.com and add it to your hosting settings.")
 
-    candidate_models = [MODEL_NAME, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
-    # Remove duplicates while preserving order
-    seen = set()
-    models_to_try = [m for m in candidate_models if not (m in seen or seen.add(m))]
-
+    candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-3.8-flash"]
     last_error = None
-    for model_to_call in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_to_call}:generateContent?key={key}"
+    for model_to_call in candidate_models:
+        clean_name = model_to_call.replace("models/", "")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_name}:generateContent?key={key}"
 
         payload = {
             "contents": contents
