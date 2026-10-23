@@ -15,7 +15,7 @@ CORS(app)  # Enable Cross-Origin Resource Sharing for Android WebView & web clie
 # ==========================================================
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 def call_gemini_api(contents, system_instruction=None, response_schema=None) -> str:
     """
@@ -26,59 +26,69 @@ def call_gemini_api(contents, system_instruction=None, response_schema=None) -> 
     if not key:
         raise ValueError("GEMINI_API_KEY is not configured in the server environment variables. Please get a free key from https://aistudio.google.com and add it to your hosting settings.")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={key}"
+    candidate_models = [MODEL_NAME, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"]
+    # Remove duplicates while preserving order
+    seen = set()
+    models_to_try = [m for m in candidate_models if not (m in seen or seen.add(m))]
 
-    payload = {
-        "contents": contents
-    }
+    last_error = None
+    for model_to_call in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_to_call}:generateContent?key={key}"
 
-    if system_instruction:
-        payload["systemInstruction"] = {
-            "parts": [{"text": system_instruction}]
+        payload = {
+            "contents": contents
         }
 
-    generation_config = {
-        "temperature": 0.4,
-        "maxOutputTokens": 2048
-    }
+        if system_instruction:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
 
-    if response_schema:
-        generation_config["responseMimeType"] = "application/json"
-        generation_config["responseSchema"] = response_schema
+        generation_config = {
+            "temperature": 0.4,
+            "maxOutputTokens": 2048
+        }
 
-    payload["generationConfig"] = generation_config
+        if response_schema:
+            generation_config["responseMimeType"] = "application/json"
+            generation_config["responseSchema"] = response_schema
 
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data_bytes,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+        payload["generationConfig"] = generation_config
 
-    try:
-        with urllib.request.urlopen(req, timeout=40) as response:
-            res_body = response.read().decode("utf-8")
-            res_json = json.loads(res_body)
-            candidates = res_json.get("candidates", [])
-            if not candidates:
-                raise ValueError("Gemini returned empty response.")
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if not parts:
-                raise ValueError("No text part in Gemini response.")
-            return parts[0].get("text", "").strip()
-    except urllib.error.HTTPError as e:
-        err_msg = e.read().decode("utf-8", errors="ignore")
-        if e.code == 429:
-            raise ValueError("Gemini free-tier rate limit reached. Please wait 30 seconds and try again.")
-        elif e.code == 400:
-            raise ValueError(f"Invalid request to Gemini: {err_msg}")
-        elif e.code == 403:
-            raise ValueError("Invalid GEMINI_API_KEY or API access denied.")
-        else:
-            raise ValueError(f"Gemini API HTTP {e.code}: {err_msg}")
-    except Exception as e:
-        raise ValueError(f"Connection error to Gemini: {str(e)}")
+        data_bytes = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data_bytes,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=40) as response:
+                res_body = response.read().decode("utf-8")
+                res_json = json.loads(res_body)
+                candidates = res_json.get("candidates", [])
+                if not candidates:
+                    raise ValueError("Gemini returned empty response.")
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if not parts:
+                    raise ValueError("No text part in Gemini response.")
+                return parts[0].get("text", "").strip()
+        except urllib.error.HTTPError as e:
+            err_msg = e.read().decode("utf-8", errors="ignore")
+            if e.code == 404:
+                last_error = f"Model {model_to_call} not found. Trying next model..."
+                continue
+            elif e.code == 429:
+                raise ValueError("Gemini free-tier rate limit reached. Please wait 30 seconds and try again.")
+            elif e.code == 403:
+                raise ValueError("Invalid GEMINI_API_KEY or API access denied.")
+            else:
+                raise ValueError(f"Gemini API HTTP {e.code}: {err_msg}")
+        except Exception as e:
+            raise ValueError(f"Connection error to Gemini: {str(e)}")
+
+    raise ValueError(f"All model attempts failed: {last_error}")
 
 # ==========================================================
 # ROUTES
