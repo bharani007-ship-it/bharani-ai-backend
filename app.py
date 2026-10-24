@@ -73,11 +73,9 @@ def call_gemini_api(contents, system_instruction=None, response_schema=None) -> 
                 return parts[0].get("text", "").strip()
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="ignore")
-            if e.code == 404:
-                last_error = f"Model {model_to_call} not found. Trying next model..."
+            if e.code in [404, 503, 429]:
+                last_error = f"Model {model_to_call} returned {e.code} ({err_msg}). Trying fallback model..."
                 continue
-            elif e.code == 429:
-                raise ValueError("Gemini free-tier rate limit reached. Please wait 30 seconds and try again.")
             elif e.code == 403:
                 raise ValueError("Invalid GEMINI_API_KEY or API access denied.")
             else:
