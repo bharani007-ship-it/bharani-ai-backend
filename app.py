@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import urllib.request
 import urllib.parse
@@ -26,7 +27,16 @@ def call_gemini_api(contents, system_instruction=None, response_schema=None) -> 
     if not key:
         raise ValueError("GEMINI_API_KEY is not configured in the server environment variables. Please get a free key from https://aistudio.google.com and add it to your hosting settings.")
 
-    candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-3.8-flash"]
+    candidate_models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+        "gemini-2.5-pro"
+    ]
     last_error = None
     for model_to_call in candidate_models:
         clean_name = model_to_call.replace("models/", "")
@@ -75,6 +85,7 @@ def call_gemini_api(contents, system_instruction=None, response_schema=None) -> 
             err_msg = e.read().decode("utf-8", errors="ignore")
             if e.code in [404, 503, 429]:
                 last_error = f"Model {model_to_call} returned {e.code} ({err_msg}). Trying fallback model..."
+                time.sleep(1.0)
                 continue
             elif e.code == 403:
                 raise ValueError("Invalid GEMINI_API_KEY or API access denied.")
